@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -18,18 +19,8 @@ import (
 const prefix = "comf."
 const channel = "474556628625260544"
 
-var tmp []int
-
-func checkExists(fileName string) string {
-	if _, err := os.Stat("images/" + fileName); !os.IsNotExist(err) {
-		fileName = "a" + fileName
-		fileName = checkExists(fileName)
-	}
-	return fileName
-}
-
-func addImage(name, image string) {
-	resp, err := http.Get(image)
+func addImage(name, url, image string) {
+	resp, err := http.Get(url)
 	if err != nil {
 		return
 	}
@@ -37,12 +28,7 @@ func addImage(name, image string) {
 	file := resp.Body
 	defer file.Close()
 
-	tokens := strings.Split(image, "/")
-	fileName := tokens[len(tokens)-1]
-
-	checkExists(fileName)
-
-	imagefile, err := os.Create("images/" + fileName)
+	imagefile, err := os.Create("images/" + image)
 	if err != nil {
 		return
 	}
@@ -58,72 +44,52 @@ func addImage(name, image string) {
 
 	for i, cmd := range cfg.Cmds {
 		if cmd.Cmd == name {
-			cfg.Cmds[i].Images = append(cfg.Cmds[i].Images, fileName)
+			cfg.Cmds[i].Images = append(cfg.Cmds[i].Images, image)
 			updateSettings()
 			return
 		}
 	}
 
-	cfg.Cmds = append(cfg.Cmds, imageCommand{Cmd: name, Images: []string{fileName}})
+	cfg.Cmds = append(cfg.Cmds, imageCommand{Cmd: name, Images: []string{image}})
 	updateSettings()
-}
-
-func removeIndexes() {
-	tmpp := cfg.Votingmessages[:0]
-	for index := range tmp {
-		for i, p := range cfg.Votingmessages {
-			if i != index {
-				tmpp = append(tmpp, p)
-			}
-		}
-	}
-	cfg.Votingmessages = tmpp[:0]
-	updateSettings()
-	tmp = []int{}
 }
 
 func democraticLoop() {
 	for {
-		for i, id := range cfg.Votingmessages {
-			msgl, err := ffs.ChannelMessages(channel, 1, id, id, id)
-			if err != nil || len(msgl) == 0 {
-				tmp = append(tmp, i)
-				continue
-			}
-			msg := msgl[0]
-
-			timeposted, _ := msg.Timestamp.Parse()
-
-			if timeposted.Add(time.Minute * 5).After(time.Now()) {
-				continue
-			}
-
-			reactions := msg.Reactions
-
-			var yes, no int
-
-			for _, r := range reactions {
-				if r.Emoji.Name == "✅" {
-					yes = r.Count
-				}
-				if r.Emoji.Name == "⛔" {
-					no = r.Count
-				}
-			}
-
-			if yes > (yes+no)/2 {
-				ffs.ChannelMessageEdit(channel, id, "We did it people, democracy works! Image added to the command.")
-				addImage(regexp.MustCompile("command `(.+)`").FindStringSubmatch(msg.Content)[1], msg.Attachments[0].URL)
-				tmp = append(tmp, i)
-				continue
-			} else if no > (yes+no)/2 {
-				ffs.ChannelMessageEdit(channel, id, "The image did not get added.")
-				tmp = append(tmp, i)
-				continue
-			}
+		msgl, err := ffs.ChannelMessages(channel, 100, "", "", "")
+		if err != nil {
+			return
 		}
-		if len(tmp) != 0 {
-			removeIndexes()
+
+		for _, msg := range msgl {
+			if strings.HasPrefix(msg.Content, "VOTE:") {
+				timeposted, _ := msg.Timestamp.Parse()
+				if timeposted.Add(time.Minute * 5).After(time.Now()) {
+					continue
+				}
+
+				reactions := msg.Reactions
+
+				var yes, no int
+
+				for _, r := range reactions {
+					if r.Emoji.Name == "✅" {
+						yes = r.Count
+					}
+					if r.Emoji.Name == "⛔" {
+						no = r.Count
+					}
+				}
+
+				if yes > (yes+no)/2 {
+					ffs.ChannelMessageEdit(channel, msg.ID, "DONE: Image added to the command")
+					addImage(regexp.MustCompile("command `(.+)`").FindStringSubmatch(msg.Content)[1], msg.Attachments[0].URL, msg.Attachments[0].Filename)
+					continue
+				} else if no > (yes+no)/2 {
+					ffs.ChannelMessageEdit(channel, msg.ID, "DONE: Image got denied by democracy")
+					continue
+				}
+			}
 		}
 		time.Sleep(10 * time.Second)
 	}
@@ -146,16 +112,14 @@ func createDemocracy(ctx *discordflo.Context, name, image string) {
 	file := resp.Body
 	defer file.Close()
 
-	tokens := strings.Split(image, "/")
-	fileName := tokens[len(tokens)-1]
-
-	msg, err := ffs.ChannelFileSendWithMessage(channel, fmt.Sprintf("<@%s> wants to add this image to the command `%s` (Voting will end in 5 minutes...)", ctx.Mess.Author.ID, name), fileName, file)
+	msg, err := ffs.ChannelFileSendWithMessage(
+		channel,
+		fmt.Sprintf("VOTE: <@%s> wants to add this image to the command `%s` (Voting will end in 5 minutes...)", ctx.Mess.Author.ID, name),
+		ctx.Mess.ID+filepath.Ext(image),
+		file)
 	if err != nil {
 		return
 	}
-
-	cfg.Votingmessages = append(cfg.Votingmessages, msg.ID)
-	updateSettings()
 
 	ffs.MessageReactionAdd(msg.ChannelID, msg.ID, "✅")
 	ffs.MessageReactionAdd(msg.ChannelID, msg.ID, "⛔")

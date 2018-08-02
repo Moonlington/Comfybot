@@ -6,7 +6,6 @@ type imageCommand struct {
 }
 
 type config struct {
-	Token          string         `json:"token"`
-	Cmds           []imageCommand `json:"cmds"`
-	Votingmessages []string       `json:"votingmessages"`
+	Token string         `json:"token"`
+	Cmds  []imageCommand `json:"cmds"`
 }
