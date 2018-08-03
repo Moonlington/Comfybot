@@ -82,8 +82,9 @@ func democraticLoop() {
 				}
 
 				if yes > (yes+no)/2 {
-					ffs.ChannelMessageEdit(channel, msg.ID, "DONE: Image added to the command")
-					addImage(regexp.MustCompile("command `(.+)`").FindStringSubmatch(msg.Content)[1], msg.Attachments[0].URL, msg.Attachments[0].Filename)
+					commandname := regexp.MustCompile("command `(.+)`").FindStringSubmatch(msg.Content)[1]
+					ffs.ChannelMessageEdit(channel, msg.ID, fmt.Sprintf("DONE: Image added to `%s`", commandname))
+					addImage(commandname, msg.Attachments[0].URL, msg.Attachments[0].Filename)
 					continue
 				} else if no > (yes+no)/2 {
 					ffs.ChannelMessageEdit(channel, msg.ID, "DONE: Image got denied by democracy")
