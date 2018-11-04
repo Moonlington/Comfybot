@@ -135,7 +135,7 @@ func addImageCommand(ctx *discordflo.Context) {
 	imagename := ctx.Args[0]
 	imagelink := ctx.Args[1]
 
-	if strings.ToLower(imagename) == "addimage" || strings.ToLower(imagename) == "help" {
+	if strings.ToLower(imagename) == "addimage" || strings.ToLower(imagename) == "help" || strings.ToLower(imagename) == "createhungergames" {
 		ctx.SendMessage("Don't attempt it.")
 		return
 	}
@@ -212,6 +212,14 @@ func initializeBot(token string) (ffs *discordflo.FloFloSession) {
 		"<command name> <link to image>",
 		"Requires both arguments to work.",
 		addImageCommand,
+	))
+
+	ffs.AddCommand("Main", discordflo.NewCommand(
+		"createHungerGames",
+		"Picks random people from the server to participate",
+		"[24, 36, 48] [list of names to include...]",
+		"",
+		createHungerGames,
 	))
 
 	// Open a websocket connection to Discord and begin listening.
